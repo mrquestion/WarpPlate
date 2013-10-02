@@ -1,0 +1,9 @@
+main: mrq.plugin.minecraft.move.WarpPlate
+name: WarpPlate
+author: R
+version: 1.2
+description: You can WARP anywhere if you set WARP PLATE somewhere!
+
+commands:
+    WarpPlate:
+    /WarpPlate:
