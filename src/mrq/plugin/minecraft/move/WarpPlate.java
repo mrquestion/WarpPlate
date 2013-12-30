@@ -1,716 +1,292 @@
 package mrq.plugin.minecraft.move;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.util.HashMap;
 
-import mrq.plugin.minecraft.tool.CommandManager;
-import mrq.plugin.minecraft.tool.CreateManager;
-import mrq.plugin.minecraft.tool.WarpPatterns;
+import mrq.plugin.minecraft.move.tool.Plate;
+import mrq.plugin.minecraft.move.tool.PlateFile;
+import mrq.plugin.minecraft.move.tool.PlateList;
+import mrq.plugin.minecraft.move.tool.PlateManager;
+import mrq.plugin.minecraft.move.tool.TeleportAction;
+import mrq.plugin.minecraft.tool.ColorString;
 import mrq.plugin.minecraft.tool.m;
+import mrq.plugin.pattern.AbstractAction;
+import mrq.plugin.pattern.PluginListener;
 
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.InvalidConfigurationException;
+import org.bukkit.craftbukkit.v1_7_R1.command.ColouredConsoleSender;
+import org.bukkit.craftbukkit.v1_7_R1.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.plugin.java.JavaPlugin;
 
-
-public class WarpPlate extends JavaPlugin implements Listener {
-    private static final int[][] DESTINATION_STEP1 = {
-        { -2, 0, -2 }, { -1, 0, -2 }, { 1, 0, -2 }, { 2, 0, -2 },
-        { -2, 0, -1 }, { 2, 0, -1 },
-        { -2, 0, 1 }, { 2, 0, 1 },
-        { -2, 0, 2 }, { -1, 0, 2 }, { 1, 0, 2 }, { 2, 0, 2 }
-    };
-    private static final int[][] DESTINATION_STEP2 = {
-        { -2, 1, -2 }, { 2, 1, -2 },
-        { -2, 1, 2 }, { 2, 1, 2 }
-    };
-    private static final int[][] DESTINATION_STEP3 = {
-        { -1, 1, -2 }, { 0, 1, -2 }, { 1, 1, -2 },
-        { -2, 1, -1 }, { -1, 1, -1 }, { 0, 1, -1 }, { 1, 1, -1 }, { 2, 1, -1 },
-        { -2, 1, 0 }, { -1, 1, 0 }, { 0, 1, 0 }, { 1, 1, 0 }, { 2, 1, 0 },
-        { -2, 1, 1 }, { -1, 1, 1 }, { 0, 1, 1 }, { 1, 1, 1 }, { 2, 1, 1 },
-        { -1, 1, 2 }, { 0, 1, 2 }, { 1, 1, 2 }
-    };
-    private static final int[][] DESTINATION_STEP4 = {
-        { 0, 0, -2 }, { 0, 0, 2 }, { -2, 0, 0 }, { 2, 0, 0 }
-    };
+public class WarpPlate extends PluginListener {
+    private static final int DEFAULT_DELAY = 3;
     
-    private static final int[][] SOURCE_STEP1 = {
-        { -1, 0, -2 }, { 0, 0, -2 }, { 1, 0, -2 },
-        { -2, 0, -1 }, { -2, 0, 0 }, { -2, 0, 1 },
-        { 2, 0, -1 }, { 2, 0, 0 }, { 2, 0, 1 },
-        { -1, 0, 2 }, { 0, 0, 2 }, { 1, 0, 2 },
-    };
-    private static final int[][] SOURCE_STEP2 = {
-        { -2, 0, -2 }, { 2, 0, -2 },
-        { -2, 0, 2 }, { 2, 0, 2 }
-    };
-    private static final int[][] SOURCE_STEP3 = {
-        { 0, 1, -2 }, { 0, 1, 2 }, { -2, 1, 0 }, { 2, 1, 0 }
-    };
-    
-    private static final int[][] SIMPLE_STEP1 = {
-        { -1, -2 }, { 1, -2 },
-        { -2, -1 }, { -1, -1 }, { 1, -1 }, { 2, -1 },
-        { -2, 1 }, { -1, 1 }, { 1, 1 }, { 2, 1 },
-        { -1, 2 }, { 1, 2 },
-    };
-    
-    private static final int[][] PATTERN_NS = {
-        { -1, 0, -1 }, { 0, 0, -1 }, { 1, 0, -1 },
-        { -1, 0, 0 }, { 1, 0, 0 },
-        { -1, 0, 1 }, { 0, 0, 1 }, { 1, 0, 1 }
-    };
-    private static final int[][] PATTERN_WE = {
-        { -1, 0, 1 }, { -1, 0, 0 }, { -1, 0, -1 },
-        { 0, 0, 1 }, { 0, 0, -1 },
-        { 1, 0, 1 }, { 1, 0, 0 }, { 1, 0, -1 },
-    };
-    
-    private static final int DO_DESTINATION = 1;
-    private static final int DO_SOURCE = 2;
-    private static final int DO_SIMPLE = 3;
-    private static final int DO_RECOVERY = 4;
-    
-    private int delay = 3;
-    private HashMap<String, Integer> hm = null;
+    private int delay = DEFAULT_DELAY;
     
     @Override
     public void onEnable() {
-        getServer().getPluginManager().registerEvents(this, this);
-        m.sg(this, "plugin is enabled!");
+        super.onEnable();
         
-        hm = new HashMap<>();
-        
-        WarpPatterns wp = WarpPatterns.getInstance();
-        wp.load(getServer());
-        m.sg(this, wp.size() + " Warp Plate detected!");
-
-        File file = new File("plugins" + File.separator + "WarpPlate" + File.separator + "WarpPlate.properties");
-        if (CreateManager.createFile(this, file)) {
-            try {
-                BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(file)));
-                String s = br.readLine();
-                if (s != null) {
-                    String[] ss = s.split("=");
-                    if (ss.length == 2 && ss[0].equals("delay")) {
-                        try {
-                            int delay = Integer.parseInt(ss[1]);
-                            this.delay = delay;
-                        } catch (NumberFormatException e) {
-                            this.delay = 3;
-                        }
-                    }
-                }
-                br.close();
-            } catch (FileNotFoundException e) {
-                m.sg(this, file.getName() + " 파일을 찾을 수 없습니다: " + e.getMessage());
-            } catch (IOException e) {
-                m.sg(this, "파일을 읽는 중 오류가 발생했습니다: " + e.getMessage());
-            }
+        try {
+            fc.load(String.format("%s%s.properties", PLUGIN_PATH, pdf.getName()));
+            delay = fc.getInt("server.warp.delay");
+        } catch (FileNotFoundException e) {
+            fc.set("server.warp.delay", DEFAULT_DELAY);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (InvalidConfigurationException e) {
+            e.printStackTrace();
         }
-        m.sg(this, "Warp Delay is " + delay);
+        
+        PlateList pl = PlateList.getInstance();
+        pl.clear();
+        PlateFile.getInstance().load(getServer());
+        m.sg(String.format("%d Warp Plate detected!", pl.size()));
     }
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        boolean b = false;
-        String s = command.getName();
-        if (sender instanceof Player) {
+        boolean success = false;
+        
+        if (sender instanceof CraftPlayer) {
             Player player = (Player)sender;
-            if (s.equalsIgnoreCase("WarpPlate")) {
-                if (args.length == 0) {
-                    player.sendMessage(ChatColor.WHITE + "[" + ChatColor.LIGHT_PURPLE + "WarpPlate" + ChatColor.WHITE + "] 명령어 도움말");
-                    player.sendMessage(ChatColor.WHITE + "  /WarpPlate " + ChatColor.DARK_GREEN + "<번호>" + ChatColor.WHITE + " : 설치된 " + ChatColor.LIGHT_PURPLE + "Warp Plate" + ChatColor.WHITE  + "의 정보를 보여줍니다.");
-                }
-                else if (args.length == 1) {
-                    b = CommandManager.showWarpPlate(player, args[0]);
-                }
+            if (args == null || args.length == 0) {
+                player.sendMessage(ColorString.format("#1[#lp%s#1] $x명령어 도움말", pdf.getName()));
+                player.sendMessage(ColorString.format(" - #1/%s #dg<번호> #1: $x설치된 #lpWarpPlate$x의 정보를 보여줍니다.", command.getName()));
             }
-        }
-        else {
-            if (s.equalsIgnoreCase("WarpPlate") || s.equalsIgnoreCase("/WarpPlate")) {
-                if (args.length == 0) {
-                    m.sg(this, "You can use next command: -d, --delay");
-                }
-                else {
-                    if (args[0].equalsIgnoreCase("-d") || args[0].equalsIgnoreCase("--delay")) {
-                        if (args.length == 2) {
-                            b = CommandManager.changeWarpDelay(this, args[1]);
+            else if (args.length == 1) {
+                PlateList pl = PlateList.getInstance();
+                try {
+                    int index = Integer.parseInt(args[0]);
+                    if (index <= 0) {
+                        player.sendMessage(ColorString.format("#1[#lp%s#1] $x범위를 벗어난 번호입니다. #dg자연수$x를 입력해주세요.", pdf.getName()));
+                    }
+                    else if (index > pl.size()) {
+                        player.sendMessage(ColorString.format("#1[#lp%s#1] $x##dg%d $x- 없는 번호입니다. #.5(총 등록된 수 : #dg%d#.5개)", pdf.getName(), index, pl.size()));
+                    }
+                    else {
+                        Plate plate = pl.get(index-1);
+                        if (plate == null) {
+                            player.sendMessage(ColorString.format("#1[#lp%s#1] #r오류$x가 발생했습니다.", pdf.getName()));
                         }
                         else {
-                            m.sg(this, "Usage: /WarpPlate " + args[0] + " <delay:integer>");
+                            player.sendMessage(ColorString.format("#1[#lp%s#1] $x##dg%d $x- (X: %d, Y: %d, Z: %d)", pdf.getName(), index, plate.getX(), plate.getY(), plate.getZ()));
+                            player.sendMessage(plate.toString(1));
+                            player.sendMessage(plate.toString(2));
+                            player.sendMessage(plate.toString(3));
+                        }
+                    }
+                } catch (NumberFormatException e) {
+                    player.sendMessage(ColorString.format("#1[#lp%s#1] #dg숫자$x가 #r아닙니다.", pdf.getName()));
+                }
+            }
+            success = true;
+        }
+        else if (sender instanceof ColouredConsoleSender){
+            if (args == null || args.length == 0) {
+                m.sg(String.format("[%s] You can use next command: -d( or --delay)", pdf.getName()));
+            }
+            else {
+                if (args[0].equalsIgnoreCase("-d") || args[0].equalsIgnoreCase("--delay")) {
+                    if (args.length == 2) {
+                        try {
+                            int before = delay;
+                            delay = Integer.parseInt(args[1]);
+                            fc.set("server.warp.delay", delay);
+                            m.sg(String.format("Warp delay changed: %d → %d", before, delay));
+                            StringBuilder sb = new StringBuilder("#lp%s$x의 대기 시간이 바뀌었습니다! : ");
+                            sb.append(String.format("%d → %d", before, delay));
+                            if (delay == 0) sb.append("(즉시)");
+                            getServer().broadcastMessage(ColorString.format(sb.toString(), pdf.getName()));
+                        } catch (NumberFormatException e) {
+                            m.sg(String.format("[%s] Usage: %s %s <delay:second(integer)>", pdf.getName(), command.getName(), args[0]));
                         }
                     }
                     else {
-                        m.sg(this, "Invalid command: " + args[0]);
+                        m.sg(String.format("[%s] Delay: %s second", pdf.getName(), fc.get("server.warp.delay")));
+                        m.sg(String.format("[%s] Usage: %s %s <delay:second(integer)>", pdf.getName(), command.getName(), args[0]));
                     }
                 }
+                else m.sg(String.format("Invalid command: %s", args[0]));
             }
+            success = true;
         }
-        return b;
+        
+        return success;
     }
     @Override
     public void onDisable() {
-        m.sg(this, "plugin is disabled!");
-        
-        WarpPatterns wp = WarpPatterns.getInstance();
-        m.sg(this, "Save " + wp.size() + " Warp Plate list...");
-        wp.save();
-        m.sg(this, "Done.");
-
-        File file = new File("plugins" + File.separator + "WarpPlate" + File.separator + "WarpPlate.properties");
-        if (CreateManager.createFile(this, file)) {
-            try {
-                BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file)));
-                bw.write("delay=" + delay);
-                bw.close();
-            } catch (FileNotFoundException e) {
-                m.sg(this, file.getName() + " 파일을 찾을 수 없습니다: " + e.getMessage());
-            } catch (IOException e) {
-                m.sg(this, "파일을 쓰는 중 오류가 발생했습니다: " + e.getMessage());
-            }
+        try {
+            fc.save(String.format("%s%s.properties", PLUGIN_PATH, pdf.getName()));
+        } catch (IOException e) {
+            e.printStackTrace();
         }
+        
+        PlateFile.getInstance().save();
+        super.onDisable();
     }
     
     @EventHandler (priority = EventPriority.MONITOR)
     public void onPlayerJoin(PlayerJoinEvent pje) {
-        pje.getPlayer().sendMessage(ChatColor.WHITE + "[" + ChatColor.LIGHT_PURPLE + "WarpPlate" + ChatColor.WHITE + " v" + getDescription().getVersion() + "] " + ChatColor.DARK_GREEN + WarpPatterns.getInstance().size() + ChatColor.WHITE + " 개의 " + ChatColor.LIGHT_PURPLE + "Warp Plate" + ChatColor.WHITE + "가 " + ChatColor.BLUE + "사용가능" + ChatColor.WHITE + "합니다!");
+        Player player = pje.getPlayer();
+        // TODO 갯수 수정
+        int size = PlateList.getInstance().size();
+        if (size > 0) {
+            player.sendMessage(ColorString.format("#1[#lp%s #1v%s] #dg%d $x개의 #lp%s$x이(가) #b활성화$x되어 있습니다!", pdf.getName(), pdf.getVersion(), size, pdf.getName()));
+        }
+        else {
+            player.sendMessage(ColorString.format("#1[#lp%s #1v%s] 현재 #b활성화$x되어 있는 #lp%s$x이(가) #dr없습니다$x.", pdf.getName(), pdf.getVersion(), pdf.getName()));
+        }
     }
     @EventHandler (priority = EventPriority.LOWEST)
     public void onPlayerInteract(PlayerInteractEvent pie) {
-        if (pie.getAction().equals(Action.RIGHT_CLICK_BLOCK)) {
+        Action action = pie.getAction();
+        if (action.equals(Action.RIGHT_CLICK_BLOCK)) {
             Player player = pie.getPlayer();
-            
             Block block = pie.getClickedBlock();
-            if (block.getType() == Material.COBBLESTONE) {
-                Integer doWhat = hm.get(player.getWorld() + "." + player.getName());
-                if (doWhat == null) {
-                    if (doDestination(block, player)) { }
-                    else if (doSource(block, player)) { }
-                    else if (doSimple(block, player)) { }
-                }
-                else {
-                    switch (doWhat) {
-                        case DO_DESTINATION:
-                            player.sendMessage(ChatColor.LIGHT_PURPLE + "Warp Plate" + ChatColor.WHITE + "를 설치 중 입니다. 잠시만 기다려 주세요.");
-                            break;
-                        case DO_SOURCE:
-                        case DO_SIMPLE:
-                            player.sendMessage(ChatColor.AQUA + "Warp" + ChatColor.WHITE + " 중 입니다. 잠시만 기다려 주세요.");
-                            break;
-                        case DO_RECOVERY:
-                            player.sendMessage(ChatColor.LIGHT_PURPLE + "Warp Plate" + ChatColor.WHITE + "를 복구 중 입니다. 잠시만 기다려 주세요.");
-                            break;
+            if (block.getType().equals(PlateManager.ACTIVATE_BLOCK)) {
+                Location location = block.getLocation();
+                
+                int direction = PlateManager.getDestinationDiretion(location);
+//                if (direction < 0) {
+//                    player.sendMessage("pattern not matched");
+//                }
+//                else {
+                if (direction > 0) {
+//                    String s = null;
+//                    switch (direction) {
+//                        case PlateManager.NORTH: s = "north"; break;
+//                        case PlateManager.SOUTH: s = "south"; break;
+//                        case PlateManager.WEST: s = "west"; break;
+//                        case PlateManager.EAST: s = "east"; break;
+//                    }
+                    Plate plate = PlateManager.getPattern(player, location, direction);
+                    
+                    PlateList pl = PlateList.getInstance();
+//                    if (pl.exist(plate)) {
+                    int index = pl.getIndex(plate);
+                    if (index < 0) {
+                        pl.add(plate);
+                        PlateManager.setPlate(PlateManager.DESTINATION_ACTIVATE, location);
+                        
+                        m.sg(String.format("New Warp Plate! #%d (x: %d, y: %d, z: %d)", pl.size(), plate.getX(), plate.getY(), plate.getZ()));
+                        player.sendMessage(ColorString.format("#lp%s$x의 설치에 #b성공$x했습니다!", pdf.getName()));
+                        getServer().broadcastMessage(ColorString.format("새로운 #dg%d $x번째 #lp%s$x이(가) 설치되었습니다!", pl.size(), pdf.getName()));
+                        World world = player.getWorld();
+                        for (Player p: world.getPlayers()) {
+                            Location l = p.getLocation();
+                            if (p.equals(player) == false) {
+                                l.setX(-(location.getBlockX() - l.getBlockX()));
+                                l.setY(-(location.getBlockY() - l.getBlockY()));
+                                l.setZ(-(location.getBlockZ() - l.getBlockZ()));
+                                double d1 = 10;
+                                double d2 = Math.sqrt(Math.pow(l.getBlockX(), 2) + Math.pow(l.getBlockY(), 2) + Math.pow(l.getBlockZ(), 2));
+                                if (d2 > d1) {
+                                    d1 /= d2;
+                                    l.setX(l.getX() * d1);
+                                    l.setY(l.getY() * d1);
+                                    l.setZ(l.getZ() * d1);
+                                }
+                                l.add(p.getLocation());
+                            }
+                            p.playSound(l, Sound.PORTAL, 1, 1);
+                            p.playSound(l, Sound.LEVEL_UP, 1, 1);
+                        }
+                    }
+                    else {
+                        player.sendMessage(ColorString.format("#lp%s$x 설치 #dr실패$x: 등록된 패턴이 이미 있습니다. (#dg%d$x번)", pdf.getName(), index+1));
+                        player.playSound(location, Sound.ITEM_BREAK, 1, 1);
                     }
                 }
-            }
-            else if (block.getType() == Material.MOSSY_COBBLESTONE) {
-                if (doRecovery(block)) {
-                    player.sendMessage(ChatColor.WHITE + "비정상적인 " + ChatColor.LIGHT_PURPLE + "Warp Plate" + ChatColor.WHITE + "를 " + ChatColor.RED + "강제" + ChatColor.WHITE + "로 되돌렸습니다.");
-                    player.playSound(player.getLocation(), Sound.DOOR_OPEN, 1, 1);
+                else {
+                    direction = PlateManager.getSourceDiretion(location);
+                    if (direction > 0) {
+                        Plate plate = PlateManager.getPattern(player, location, direction);
+                        PlateList pl = PlateList.getInstance();
+                        int index = pl.getIndex(plate);
+                        if (index < 0) {
+                            player.sendMessage(ColorString.format("#lp%s $x사용 #dr실패$x: 등록된 패턴이 없습니다.", pdf.getName()));
+                            player.playSound(location, Sound.ITEM_BREAK, 1, 1);
+                        }
+                        else {
+                            plate = pl.get(index);
+                            location = plate.getLocation().clone().add(0.5, 1, 0.5);
+                            AbstractAction aa = new TeleportAction(WarpPlate.this, player, location, delay, index+1);
+                            getServer().getScheduler().scheduleSyncDelayedTask(WarpPlate.this, aa);
+                        }
+                    }
+                    else {
+                        boolean success = PlateManager.getSimpleDirection(location);
+                        if (success) {
+                            Location spawn = player.getBedSpawnLocation();
+                            if (spawn == null) {
+                                player.sendMessage(ColorString.format("기존에 저장된 위치가 #r없습니다$x."));
+                            }
+                            else {
+                                PlateManager.setPlate(PlateManager.SIMPLE, location);
+                                AbstractAction aa = new TeleportAction(WarpPlate.this, player, spawn, delay, TeleportAction.HOME);
+                                getServer().getScheduler().scheduleSyncDelayedTask(WarpPlate.this, aa);
+                            }
+                        }
+                        else {
+                            
+                        }
+                    }
                 }
             }
         }
     }
     @EventHandler (priority = EventPriority.HIGHEST)
     public void onBlockPlace(BlockPlaceEvent bpe) {
-        Player player = bpe.getPlayer();
-        WarpPatterns wp = WarpPatterns.getInstance();
-        int index = wp.getIncludeIndex(bpe.getBlock().getLocation());
-        if (index >= 0) {
-            World world = player.getWorld();
-            Block block1 = world.getBlockAt(wp.getLocation(index));
-            block1.setType(Material.COBBLESTONE);
-            for (int i=0; i<DESTINATION_STEP1.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP1[i][0], DESTINATION_STEP1[i][1], DESTINATION_STEP1[i][2]));
-                block2.setType(Material.COBBLESTONE);
-            }
-            for (int i=0; i<DESTINATION_STEP2.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP2[i][0], DESTINATION_STEP2[i][1], DESTINATION_STEP2[i][2]));
-                block2.setType(Material.REDSTONE_TORCH_OFF);
-            }
-            
-            wp.remove(index);
-            getServer().broadcastMessage(ChatColor.WHITE + "기존에 설치된 " + ChatColor.DARK_GREEN + (index+1) + ChatColor.WHITE + " 번째 " + ChatColor.LIGHT_PURPLE + "Warp Plate" + ChatColor.WHITE + "가 " + ChatColor.RED + "파괴" + ChatColor.WHITE + "되었습니다!");
-            for (Player p: player.getWorld().getPlayers()) {
-                p.playSound(p.getLocation(), Sound.ANVIL_BREAK, 1, 1);
-            }
-        }
+        breakPlate(bpe.getBlock(), bpe.getPlayer());
     }
     @EventHandler (priority = EventPriority.HIGHEST)
     public void onBlockBreak(BlockBreakEvent bbe) {
-        Player player = bbe.getPlayer();
-        WarpPatterns wp = WarpPatterns.getInstance();
-        int index = wp.getIncludeIndex(bbe.getBlock().getLocation());
+        breakPlate(bbe.getBlock(), bbe.getPlayer());
+    }
+    
+    private void breakPlate(Block block, Player player) {
+        World world = block.getWorld();
+        Location location = block.getLocation();
+        PlateList pl = PlateList.getInstance();
+        int index = pl.getIntersectIndex(block.getLocation());
         if (index >= 0) {
-            World world = player.getWorld();
-            Block block1 = world.getBlockAt(wp.getLocation(index));
-            changePlate(block1, false);
+            Plate plate = pl.get(index);
+            PlateManager.setPlate(PlateManager.DESTINATION_DEACTIVATE, plate.getLocation());
+            pl.remove(index);
             
-            wp.remove(index);
-            getServer().broadcastMessage(ChatColor.WHITE + "기존에 설치된 " + ChatColor.DARK_GREEN + (index+1) + ChatColor.WHITE + " 번째 " + ChatColor.LIGHT_PURPLE + "Warp Plate" + ChatColor.WHITE + "가 " + ChatColor.RED + "파괴" + ChatColor.WHITE + "되었습니다!");
-            for (Player p: player.getWorld().getPlayers()) {
-                p.playSound(p.getLocation(), Sound.ANVIL_BREAK, 1, 1);
+            m.sg(String.format("Warp Plate #%d destroyed.", (index+1)));
+            getServer().broadcastMessage(ColorString.format("기존에 설치된 #dg%d$x번 #lp%s$x이(가) #r파괴$x되었습니다!", (index+1), pdf.getName()));
+            for (Player p: world.getPlayers()) {
+                Location l = p.getLocation();
+                if (p.equals(player) == false) {
+                    l.setX(-(location.getBlockX() - l.getBlockX()));
+                    l.setY(-(location.getBlockY() - l.getBlockY()));
+                    l.setZ(-(location.getBlockZ() - l.getBlockZ()));
+                    double d1 = 10;
+                    double d2 = Math.sqrt(Math.pow(l.getBlockX(), 2) + Math.pow(l.getBlockY(), 2) + Math.pow(l.getBlockZ(), 2));
+                    if (d2 > d1) {
+                        d1 /= d2;
+                        l.setX(l.getX() * d1);
+                        l.setY(l.getY() * d1);
+                        l.setZ(l.getZ() * d1);
+                    }
+                    l.add(p.getLocation());
+                }
+                p.playSound(l, Sound.ANVIL_BREAK, 1, 1);
             }
         }
     }
-
-    private class Teleport implements Runnable {
-        private static final int DELAY = 10;
-        
-        private Player player = null;
-        private Location location = null;
-        private int index = 0, repeat = 0, count = 0;
-        
-        private Teleport(Player player, Location location, int index) {
-            this.player = player;
-            this.location = location;
-            this.index = index;
-            repeat = delay * 2;
-            count = repeat;
-        }
-        @Override
-        public void run() {
-            location.setPitch(player.getLocation().getPitch());
-            location.setYaw(player.getLocation().getYaw());
-            if (player.teleport(location)) {
-                if (count == repeat) {
-                    if (index > 0) {
-                        player.playSound(location, Sound.PORTAL_TRAVEL, 0.3f, 3);
-                        player.playSound(location, Sound.DOOR_OPEN, 1, 1);
-                        m.sg(this, "Warp to #" + index + " success! : " + player.getName());
-                    }
-                    else {
-                        player.playSound(location, Sound.PORTAL_TRIGGER, 0.5f, 2);
-                        player.playSound(location, Sound.DOOR_OPEN, 1, 1);
-                        m.sg(this, "Warp to Home success! : " + player.getName());
-                    }
-                }
-                if (count > 0 && count%2 == 0) {
-                    player.sendMessage(ChatColor.DARK_GREEN + String.format(" %" + ((int)Math.log10(repeat)+1) + "d", count/2) + ChatColor.WHITE + "...");
-                    player.playSound(player.getLocation(), Sound.CLICK, 1, 1);
-                }
-                count--;
-                
-                if (count > 0) {
-                    getServer().getScheduler().scheduleSyncDelayedTask(WarpPlate.this, this, DELAY);
-                }
-                else {
-                    if (index > 0) {
-                        player.sendMessage(ChatColor.AQUA + "Warp" + ChatColor.WHITE + "에 " + ChatColor.BLUE + "성공" + ChatColor.WHITE + "했습니다!");
-                    }
-                    else {
-                        player.sendMessage(ChatColor.WHITE + "기존에 저장된 위치로 " + ChatColor.AQUA + "Warp" + ChatColor.WHITE + "에 " + ChatColor.BLUE + "성공" + ChatColor.WHITE + "했습니다!");
-                    }
-                    player.playSound(player.getLocation(), Sound.CHEST_CLOSE, 1, 1);
-                    
-                    hm.remove(player.getWorld() + "." + player.getName());
-                }
-            }
-            else {
-                if (index > 0) {
-                    m.sg(this, "Warp to #" + index + " fail... : " + player.getName());
-                }
-                else {
-                    m.sg(this, "Warp to Home fail... : " + player.getName());
-                }
-            }
-        }
-    }
-    
-    private boolean doDestination(Block block1, Player player) {
-        boolean b = true;
-        
-        WarpPatterns wp = WarpPatterns.getInstance();
-        if (wp.isIncluded(block1.getLocation())) {
-            b = false;
-        }
-        
-        World world = block1.getWorld();
-        if (b) {
-            for (int i=-2; i<=2; i++) {
-                for (int j=-2; j<=2; j++) {
-                    Block block2 = world.getBlockAt(block1.getLocation().add(i, 2, j));
-                    if (block2.getType() != Material.AIR) {
-                        b = false;
-                        break;
-                    }
-                }
-                if (b == false) break;
-            }
-        }
-        
-        if (b) {
-            for (int i=0; i<DESTINATION_STEP1.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP1[i][0], DESTINATION_STEP1[i][1], DESTINATION_STEP1[i][2]));
-                if (block2.getType() != block1.getType()) {
-                    b = false;
-                    break;
-                }
-            }
-        }
-        
-        if (b) {
-            for (int i=0; i<DESTINATION_STEP2.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP2[i][0], DESTINATION_STEP2[i][1], DESTINATION_STEP2[i][2]));
-                if (block2.getType() != Material.REDSTONE_TORCH_ON && block2.getType() != Material.REDSTONE_TORCH_OFF) {
-                    b = false;
-                    break;
-                }
-            }
-        }
-        
-        if (b) {
-            for (int i=0; i<DESTINATION_STEP3.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP3[i][0], DESTINATION_STEP3[i][1], DESTINATION_STEP3[i][2]));
-                if (block2.getType() != Material.AIR) {
-                    b = false;
-                    break;
-                }
-            }
-        }
-        
-        char c = '\0';
-        if (b) {
-            int count = 0;
-            for (int i=0; i<DESTINATION_STEP4.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP4[i][0], DESTINATION_STEP4[i][1], DESTINATION_STEP4[i][2]));
-                if (block2.getType() == Material.TORCH) {
-                    switch (i) {
-                        case 0: c = 'n'; break;
-                        case 1: c = 's'; break;
-                        case 2: c = 'w'; break;
-                        case 3: c = 'e'; break;
-                    }
-                    count++;
-                }
-                else if (block2.getType() != Material.AIR) {
-                    b = false;
-                    break;
-                }
-            }
-            if (b && count != 1) {
-                b = false;
-            }
-        }
-        
-        if (b) {
-            int[] pattern = new int[8];
-            switch (c) {
-                case 'n':
-                    for (int i=0; i<PATTERN_NS.length; i++) {
-                        Block block2 = world.getBlockAt(block1.getLocation().add(PATTERN_NS[i][0], PATTERN_NS[i][1], PATTERN_NS[i][2]));
-                        pattern[i] = block2.getTypeId();
-                    }
-                    break;
-                case 's':
-                    for (int i=0; i<PATTERN_NS.length; i++) {
-                        Block block2 = world.getBlockAt(block1.getLocation().add(PATTERN_NS[PATTERN_NS.length-1-i][0], PATTERN_NS[PATTERN_NS.length-1-i][1], PATTERN_NS[PATTERN_NS.length-1-i][2]));
-                        pattern[i] = block2.getTypeId();
-                    }
-                    break;
-                case 'w':
-                    for (int i=0; i<PATTERN_WE.length; i++) {
-                        Block block2 = world.getBlockAt(block1.getLocation().add(PATTERN_WE[i][0], PATTERN_WE[i][1], PATTERN_WE[i][2]));
-                        pattern[i] = block2.getTypeId();
-                    }
-                    break;
-                case 'e':
-                    for (int i=0; i<PATTERN_WE.length; i++) {
-                        Block block2 = world.getBlockAt(block1.getLocation().add(PATTERN_WE[PATTERN_WE.length-1-i][0], PATTERN_WE[PATTERN_WE.length-1-i][1], PATTERN_WE[PATTERN_WE.length-1-i][2]));
-                        pattern[i] = block2.getTypeId();
-                    }
-                    break;
-            }
-            
-            if (c != '\0') {
-                Location location = block1.getLocation();
-                if (wp.isMatched(world, pattern)) {
-                    player.sendMessage(ChatColor.LIGHT_PURPLE + "Warp Plate" + ChatColor.WHITE + " 설치 " + ChatColor.RED + "실패" + ChatColor.WHITE + ": 등록된 패턴이 이미 있습니다.");
-                    player.playSound(player.getLocation(), Sound.ITEM_BREAK, 1, 1);
-                    b = false;
-                }
-                else {
-                    hm.put(player.getWorld() + "." + player.getName(), DO_DESTINATION);
-                    
-                    wp.add(block1.getWorld(), location, pattern);
-                    changePlate(block1, true);
-                    m.sg(this, "New Warp Plate! #" + wp.size() + "(x: " + location.getBlockX() + ", y: " + location.getBlockY() + ", z: " + location.getBlockZ() + ")");
-                    player.sendMessage(ChatColor.LIGHT_PURPLE + "Warp Plate" + ChatColor.WHITE + "의 설치에 " + ChatColor.BLUE + "성공" + ChatColor.WHITE + "했습니다!");
-                    getServer().broadcastMessage(ChatColor.WHITE + "새로운 " + ChatColor.DARK_GREEN + wp.size() + ChatColor.WHITE + " 번째 " + ChatColor.LIGHT_PURPLE + "Warp Plate" + ChatColor.WHITE + "가 설치되었습니다!");
-                    for (Player p: world.getPlayers()) {
-                        p.playSound(p.getLocation(), Sound.PORTAL, 1, 1);
-                        p.playSound(p.getLocation(), Sound.LEVEL_UP, 1, 1);
-                    }
-                    
-                    hm.remove(player.getWorld() + "." + player.getName());
-                }
-            }
-        }
-        
-        return b;
-    }
-    private boolean doSource(Block block1, Player player) {
-        boolean b = true;
-        
-        World world = block1.getWorld();
-        int count = 0;
-        for (int i=-2; i<=2; i++) {
-            for (int j=-2; j<=2; j++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(i, 1, j));
-                if (block2.getType() == Material.AIR) count++;
-                
-                Block block3 = world.getBlockAt(block1.getLocation().add(i, 2, j));
-                if (block3.getType() == Material.AIR) count++;
-            }
-        }
-        if (count != 49) {
-            b = false;
-        }
-        
-        if (b) {
-            for (int i=0; i<SOURCE_STEP1.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(SOURCE_STEP1[i][0], SOURCE_STEP1[i][1], SOURCE_STEP1[i][2]));
-                if (block2.getType() != block1.getType()) {
-                    b = false;
-                    break;
-                }
-            }
-        }
-        
-        if (b) {
-            for (int i=0; i<SOURCE_STEP2.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(SOURCE_STEP2[i][0], SOURCE_STEP2[i][1], SOURCE_STEP2[i][2]));
-                if (block2.getType() != Material.AIR) {
-                    b = false;
-                    break;
-                }
-            }
-        }
-        
-        char c = '\0';
-        if (b) {
-            count = 0;
-            for (int i=0; i<SOURCE_STEP3.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(SOURCE_STEP3[i][0], SOURCE_STEP3[i][1], SOURCE_STEP3[i][2]));
-                if (block2.getType() == Material.TORCH) {
-                    switch (i) {
-                        case 0: c = 'n'; break;
-                        case 1: c = 's'; break;
-                        case 2: c = 'w'; break;
-                        case 3: c = 'e'; break;
-                    }
-                    count++;
-                }
-                else if (block2.getType() != Material.AIR) {
-                    b = false;
-                    break;
-                }
-            }
-            if (b && count != 1) {
-                b = false;
-            }
-        }
-        
-        if (b) {
-            int[] pattern = new int[8];
-            switch (c) {
-                case 'n':
-                    for (int i=0; i<PATTERN_NS.length; i++) {
-                        Block block2 = world.getBlockAt(block1.getLocation().add(PATTERN_NS[i][0], PATTERN_NS[i][1], PATTERN_NS[i][2]));
-                        pattern[i] = block2.getTypeId();
-                    }
-                    break;
-                case 's':
-                    for (int i=0; i<PATTERN_NS.length; i++) {
-                        Block block2 = world.getBlockAt(block1.getLocation().add(PATTERN_NS[PATTERN_NS.length-1-i][0], PATTERN_NS[PATTERN_NS.length-1-i][1], PATTERN_NS[PATTERN_NS.length-1-i][2]));
-                        pattern[i] = block2.getTypeId();
-                    }
-                    break;
-                case 'w':
-                    for (int i=0; i<PATTERN_WE.length; i++) {
-                        Block block2 = world.getBlockAt(block1.getLocation().add(PATTERN_WE[i][0], PATTERN_WE[i][1], PATTERN_WE[i][2]));
-                        pattern[i] = block2.getTypeId();
-                    }
-                    break;
-                case 'e':
-                    for (int i=0; i<PATTERN_WE.length; i++) {
-                        Block block2 = world.getBlockAt(block1.getLocation().add(PATTERN_WE[PATTERN_WE.length-1-i][0], PATTERN_WE[PATTERN_WE.length-1-i][1], PATTERN_WE[PATTERN_WE.length-1-i][2]));
-                        pattern[i] = block2.getTypeId();
-                    }
-                    break;
-            }
-            
-            if (c != '\0') {
-                WarpPatterns wp = WarpPatterns.getInstance();
-                int i = wp.getMatched(world, pattern);
-                if (i >= 0) {
-                    hm.put(player.getWorld() + "." + player.getName(), DO_SOURCE);
-                    
-                    player.sendMessage(ChatColor.AQUA + "Warp" + ChatColor.WHITE + " 중 입니다. 잠시만 기다려 주세요...");
-                    
-                    Location location = wp.getLocation(i).clone().add(0.5, 1, 0.5);
-                    getServer().getScheduler().scheduleSyncDelayedTask(this, new Teleport(player, location, i+1));
-                }
-                else {
-                    b = false;
-                }
-            }
-        }
-        
-        return b;
-    }
-    private boolean doSimple(Block block1, Player player) {
-        boolean b = true;
-        
-        World world = block1.getWorld();
-        for (int i=0; i<SIMPLE_STEP1.length; i++) {
-            Block block2 = world.getBlockAt(block1.getLocation().add(SIMPLE_STEP1[i][0], 0, SIMPLE_STEP1[i][1]));
-            if (block2.getType() != block1.getType()) {
-                b = false;
-                break;
-            }
-        }
-        
-        if (b) {
-            int count = 0;
-            for (int i=-2; i<=2; i++) {
-                for (int j=-2; j<=2; j++) {
-                    Block block2 = world.getBlockAt(block1.getLocation().add(i, 0, j));
-                    if (block2.getType() == Material.AIR) {
-                        count++;
-                    }
-                }
-            }
-            
-            if (count+SIMPLE_STEP1.length+1 < 5*5) {
-                b = false;
-            }
-        }
-        
-        if (b) {
-            Location location = player.getBedSpawnLocation();
-            if (location == null) {
-                player.sendMessage(ChatColor.WHITE + "기존에 저장된 위치가 " + ChatColor.RED + "없습니다.");
-            }
-            else {
-                hm.put(player.getWorld() + "." + player.getName(), DO_SIMPLE);
-                
-                player.sendMessage(ChatColor.AQUA + "Warp" + ChatColor.WHITE + " 중 입니다. 잠시만 기다려 주세요...");
-                
-                location.add(0, 1, 0);
-                getServer().getScheduler().scheduleSyncDelayedTask(this, new Teleport(player, location, 0));
-                
-                block1.setType(Material.AIR);
-                for (int i=0; i<SIMPLE_STEP1.length; i++) {
-                    Block block2 = world.getBlockAt(block1.getLocation().add(SIMPLE_STEP1[i][0], 0, SIMPLE_STEP1[i][1]));
-                    block2.setType(Material.AIR);
-                }
-            }
-        }
-        
-        return b;
-    }
-    private boolean doRecovery(Block block1) {
-        boolean b = true;
-        
-        if (WarpPatterns.getInstance().isMatched(block1.getLocation())) {
-            b = false;
-        }
-        
-        int count = 0;
-        if (b) {
-            World world = block1.getWorld();
-            for (int i=0; i<DESTINATION_STEP1.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP1[i][0], DESTINATION_STEP1[i][1], DESTINATION_STEP1[i][2]));
-                if (block2.getType() == Material.OBSIDIAN) {
-                    count++;
-                }
-            }
-            
-            for (int i=0; i<DESTINATION_STEP2.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP1[i][0], DESTINATION_STEP1[i][1], DESTINATION_STEP1[i][2]));
-                if (block2.getType() == Material.TORCH) {
-                    count++;
-                }
-            }
-            
-            if ((DESTINATION_STEP1.length+DESTINATION_STEP2.length)/count > 1) {
-                b = false;
-            }
-        }
-        
-        if (b) {
-            recoverPlate(block1);
-        }
-        
-        return b;
-    }
-    private void changePlate(Block block1, boolean b) {
-        World world = block1.getWorld();
-        if (b) {
-            block1.setType(Material.MOSSY_COBBLESTONE);
-            for (int i=0; i<DESTINATION_STEP1.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP1[i][0], DESTINATION_STEP1[i][1], DESTINATION_STEP1[i][2]));
-                block2.setType(Material.OBSIDIAN);
-            }
-            for (int i=0; i<DESTINATION_STEP2.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP2[i][0], DESTINATION_STEP2[i][1], DESTINATION_STEP2[i][2]));
-                block2.setType(Material.TORCH);
-            }
-        }
-        else {
-            block1.setType(Material.COBBLESTONE);
-            for (int i=0; i<DESTINATION_STEP1.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP1[i][0], DESTINATION_STEP1[i][1], DESTINATION_STEP1[i][2]));
-                block2.setType(Material.COBBLESTONE);
-            }
-            for (int i=0; i<DESTINATION_STEP2.length; i++) {
-                Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP2[i][0], DESTINATION_STEP2[i][1], DESTINATION_STEP2[i][2]));
-                block2.setType(Material.REDSTONE_TORCH_OFF);
-            }
-        }
-    }
-    private void recoverPlate(Block block1) {
-        World world = block1.getWorld();
-        block1.setType(Material.COBBLESTONE);
-        for (int i=0; i<DESTINATION_STEP1.length; i++) {
-            Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP1[i][0], DESTINATION_STEP1[i][1], DESTINATION_STEP1[i][2]));
-            if (block2.getType() == Material.OBSIDIAN) {
-                block2.setType(Material.COBBLESTONE);
-            }
-        }
-        for (int i=0; i<DESTINATION_STEP2.length; i++) {
-            Block block2 = world.getBlockAt(block1.getLocation().add(DESTINATION_STEP2[i][0], DESTINATION_STEP2[i][1], DESTINATION_STEP2[i][2]));
-            if (block2.getType() == Material.TORCH) {
-                block2.setType(Material.REDSTONE_TORCH_OFF);
-            }
-        }
-    }
-    
-    public int getDelay() { return delay; }
-    public void setDelay(int delay) { this.delay = delay; }
 }
