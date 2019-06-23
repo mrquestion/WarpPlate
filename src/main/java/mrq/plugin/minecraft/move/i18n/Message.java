@@ -64,21 +64,17 @@ public class Message {
         sendMessage(player, messageKey, null);
     }
     public static void sendMessage(Player player, Messages messageKey, Map<String, Object> map) {
-        l.og("map:", map);
         // Load configuration from player locale
         YamlConfiguration yamlConfiguration = getLocaleMessages(player.getLocale());
         if (yamlConfiguration == null) {
             // Change to default locale
             yamlConfiguration = getLocaleMessages(String.valueOf(Messages.DEFAULT_LOCALE));
         }
-        l.og("messageKey:", messageKey, String.valueOf(messageKey));
         // Get template string
         String template = yamlConfiguration.getString(String.valueOf(messageKey), "");
-        l.og("template:", template);
         StrSubstitutor strSubstitutor = new StrSubstitutor(map);
         // Make message from template string
         String message = strSubstitutor.replace(template);
-        l.og("message:", message);
-        player.sendMessage(String.format("[ %s ] %s", "WarpPlate", message));
+        player.sendMessage(String.format("[ %s ] %s", pluginName, message));
     }
 }
