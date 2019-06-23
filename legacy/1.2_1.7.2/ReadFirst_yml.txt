@@ -1,0 +1,35 @@
+﻿plugin.yml
+
+주석을 어떻게 쓰는지 모르므로 그냥 //, /**/ 사용
+
+
+
+// 메인 클래스
+// 예) main: pagckages...ClassName
+// JavaPlugin 클래스를 상속받은 클래스 파일이 ClassName 이라면
+// 반드시 패키지 뒤에 클래스 이름까지 명시해야 함
+main: mrq.plugin.minecraft.move.WarpPlate
+
+// 서버에서 읽어들여 출력하는 플러그인 이름 명시
+// PluginDescriptor인가로 접근 가능
+name: WarpPlate
+
+// ㅇㅇ
+author: R
+
+// ㅇㅇ
+version: 1.2
+
+// ㅇㅇ
+description: You can WARP anywhere if you set WARP PLATE somewhere!
+
+// 명령어 필터링
+// 서버상 명령어의 편의를 위해 슬래시를 하나 더 붙인 것이 있는데 이럴 경우
+// 서버 : WarpPlate, /WarpPlate
+// 플레이어 : /WarpPlate, //WarpPlate
+// 위의 명령어가 입력되면 onCommand로 진입됨
+commands:
+    WarpPlate:
+    /WarpPlate:
+    wp:
+    /wp:
