@@ -104,8 +104,12 @@ public class WarpPlate extends JavaPlugin implements Listener {
                         map.put("plate.z", plate.getZ());
                         Message.sendMessage(player, Messages.TELEPORT_COORDINATES, map);
 
+                        // Get pitch and yaw from player
+                        Location location = player.getLocation();
+                        location.setX(plate.getX() + .5);
+                        location.setY(plate.getY() + 1);
+                        location.setZ(plate.getZ() + .5);
                         // Teleport to exit
-                        Location location = new Location(world, plate.getX() + .5, plate.getY() + 1, plate.getZ() + .5);
                         player.teleport(location);
                     }
                 }
