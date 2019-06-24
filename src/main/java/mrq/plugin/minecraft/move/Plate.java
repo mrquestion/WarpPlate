@@ -4,6 +4,7 @@ package mrq.plugin.minecraft.move;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.common.base.Charsets;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
@@ -13,6 +14,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Arrays;
+import java.util.UUID;
 
 public class Plate {
     public static int LENGTH = 5;
@@ -23,6 +25,9 @@ public class Plate {
     private String hash;
     @JsonIgnore private Player player;
     private String playerName;
+    @JsonIgnore private World world;
+    private String worldName;
+    private UUID worldUID;
     private int x, y, z;
     private Material[] pattern;
     @JsonIgnore private LocalDate localDate;
@@ -36,6 +41,9 @@ public class Plate {
         setHash(pattern);
         setPlayer(player);
         setPlayerName(player.getName());
+        setWorld(player.getWorld());
+        setWorldName(getWorld().getName());
+        setWorldUID(getWorld().getUID());
         setX(block.getX());
         setY(block.getY());
         setZ(block.getZ());
@@ -88,12 +96,29 @@ public class Plate {
     public void setPlayer(Player player) {
         this.player = player;
     }
-
     public String getPlayerName() {
         return playerName;
     }
     public void setPlayerName(String playerName) {
         this.playerName = playerName;
+    }
+    @JsonIgnore public World getWorld() {
+        return world;
+    }
+    public void setWorld(World world) {
+        this.world = world;
+    }
+    public String getWorldName() {
+        return worldName;
+    }
+    public void setWorldName(String worldName) {
+        this.worldName = worldName;
+    }
+    public UUID getWorldUID() {
+        return worldUID;
+    }
+    public void setWorldUID(UUID worldUID) {
+        this.worldUID = worldUID;
     }
 
     public int getX() {
@@ -149,12 +174,20 @@ public class Plate {
         this.timestamp = timestamp;
     }
 
-    boolean equals(Material[] pattern) {
+    public boolean equals(UUID worldUID, Material[] pattern) {
+        return equals(worldUID) && equals(pattern);
+    }
+    public boolean equals(UUID worldUID) {
+        return worldUID.equals(getWorldUID());
+    }
+    public boolean equals(Material[] pattern) {
         return getHash().equals(getPatternHash(pattern));
     }
 
-    boolean contains(int x, int y, int z) {
-        if (Math.abs(x - getX()) > LENGTH / 2) {
+    public boolean contains(World world, int x, int y, int z) {
+        if (!world.getUID().equals(getWorldUID())) {
+            return false;
+        } else if (Math.abs(x - getX()) > LENGTH / 2) {
             return false;
         } else if (Math.abs(z - getZ()) > LENGTH / 2) {
             return false;

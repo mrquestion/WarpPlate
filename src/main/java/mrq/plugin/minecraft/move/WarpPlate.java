@@ -106,6 +106,8 @@ public class WarpPlate extends JavaPlugin implements Listener {
 
                         // Get pitch and yaw from player
                         Location location = player.getLocation();
+                        // Set world and coordinates from plate
+                        location.setWorld(getServer().getWorld(plate.getWorldUID()));
                         location.setX(plate.getX() + .5);
                         location.setY(plate.getY() + 1);
                         location.setZ(plate.getZ() + .5);
@@ -404,7 +406,7 @@ public class WarpPlate extends JavaPlugin implements Listener {
         List<Plate> plates = loadPlates();
         for (Plate plate: plates) {
             // Check pattern is same
-            if (plate.equals(removePlate.getPattern())) {
+            if (plate.equals(removePlate.getWorldUID(), removePlate.getPattern())) {
                 // Check coordinates is same
                 if (plate.getX() == removePlate.getX() && plate.getY() == removePlate.getY() && plate.getZ() == removePlate.getZ()) {
                     plates.remove(plate);
@@ -496,7 +498,7 @@ public class WarpPlate extends JavaPlugin implements Listener {
         int z = checkBlock.getZ();
         for (Plate plate: loadPlates()) {
             // Check broken block in layers
-            if (plate.contains(x, y, z)) {
+            if (plate.contains(world, x, y, z)) {
                 // Restruct layer to disable
                 Block restructBlock = world.getBlockAt(plate.getX(), plate.getY(), plate.getZ());
                 restructLayers(restructBlock, false);
